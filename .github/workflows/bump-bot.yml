@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   bump-version:
-    if: github.actor != 'github-actions[bot]' && !startsWith(github.event.head_commit.message, 'Bump version')
+    if: github.actor != 'github-actions[bot]' && !startsWith(github.event.head_commit.message, 'Bump version') && !contains(github.event.head_commit.message, '[no-bump]')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
