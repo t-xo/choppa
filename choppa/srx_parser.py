@@ -14,27 +14,51 @@ class SrxDocument:
     def __init__(
         self,
         cascade: bool = True,
-        ruleset: Union[pathlib.Path, None, str] = None,
+        ruleset: Union[pathlib.Path, None, str, io.StringIO, io.BytesIO] = None,
         validate_ruleset: Union[pathlib.Path, None, str] = None,
+        parameter_map: Optional[Dict[str, Any]] = None,
+        default_pattern_flags: int = 0,
     ) -> None:
         """
         Creates empty document.
         cascade True if document is cascading
-        ruleset a path to the srx xml file to be loaded (supply None to start with an empty doc)
+        ruleset a path to the srx xml file to be loaded, or an open reader, or string.
         validate_ruleset a filepath to xsd (or None, to disable validation) to validate against DTD
+        parameter_map optional parameters for transformation (e.g. map_rule_name)
         """
+        from .version import SrxVersion
+        from .transformers import SrxTransformer
+        import io
+
         self.cascade = cascade
         self.language_map_list: List[LanguageMap] = []
         self.regex_cache: Dict[str, re.Regex] = {}
         self.rule_manager_cache: Dict[str, RuleManager] = {}
+        self.default_pattern_flags: int = default_pattern_flags
 
         if ruleset is not None:
+            if isinstance(ruleset, (str, pathlib.Path)) and not ruleset.startswith("<"):
+                with open(str(ruleset), "r", encoding="utf-8") as f:
+                    xml_content = f.read()
+            elif hasattr(ruleset, "read"):
+                xml_content = ruleset.read()
+                if isinstance(xml_content, bytes):
+                    xml_content = xml_content.decode("utf-8")
+            else:
+                xml_content = str(ruleset)
+
+            try:
+                version = SrxVersion.detect(io.StringIO(xml_content))
+                if version == SrxVersion.VERSION_1_0:
+                    xml_content = SrxTransformer.transform(xml_content, parameter_map)
+            except Exception:
+                pass
+
             if validate_ruleset is not None:
                 schema: xmlschema.XMLSchema = xmlschema.XMLSchema(str(validate_ruleset))
+                schema.validate(xml_content)
 
-                schema.validate(str(ruleset))
-
-            sax_parse(str(ruleset), SRXHandler(document=self))
+            sax_parse(io.StringIO(xml_content), SRXHandler(document=self))
 
     def add_language_map(self, pattern: str, language_rule: LanguageRule) -> None:
         """
@@ -42,22 +66,27 @@ class SrxDocument:
         """
         self.language_map_list.append(LanguageMap(pattern, language_rule))
 
-    def compile(self, regex: str) -> re.Regex:
+    def compile(self, regex: str, flags: Optional[int] = None) -> re.Regex:
         """
-        Compiles given pattern as regex.Regex (V1), caches it
+        Compiles given pattern as regex.Regex (V1), caches it.
+        Fixes Java-style anchors and character classes.
+        Fixes Java-style anchors and character classes.
+        Default flags are Unicode and VERSION1. re.M is NOT included by default.
+        Uses document's default_pattern_flags if no flags provided.
         """
-        key: str = "PATTERN_" + regex
+        if flags is None:
+            flags = re.U | re.V1 | self.default_pattern_flags
+
+        key: str = f"PATTERN_{regex}_{flags}"
 
         pattern: Optional[re.Regex] = self.regex_cache.get(key, None)
 
         if pattern is None:
-            # Fixing irregularities in \h\v behavior
-            # Both \p{H} and \p{V} were added in regex 2022.8.17
-            # More details can be found here:
-            # https://github.com/mrabarnett/mrab-regex/issues/477#issuecomment-1218409217
+            regex = re.sub(r"(?<!\\)(?<=^|\||\()\^", r"(?:\\G|^)", regex)
+
             regex = regex.replace(r"\h", r"\p{H}").replace(r"\v", r"\p{V}")
 
-            pattern = re.compile(regex, flags=re.M | re.U | re.V1)
+            pattern = re.compile(regex, flags=flags)
             self.regex_cache[key] = pattern
 
         return pattern

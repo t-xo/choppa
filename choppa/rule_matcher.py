@@ -6,7 +6,8 @@ from .structures import Rule
 
 class JavaMatcher:
     """
-    Partial implementation of java's matcher class
+    Partial implementation of java's matcher class using python's regex module.
+    It uses pos and endpos to respect regions while allowing lookaround context.
     """
 
     def __init__(self, pattern: Union[str, re.Regex], text: str, max_lookaround_len: int = 100) -> None:
@@ -20,7 +21,8 @@ class JavaMatcher:
         self.max_lookaround_len = max_lookaround_len
 
         if isinstance(pattern, str):
-            self.pattern = re.compile(pattern)
+            pattern = re.sub(r"(?<!\\)(?<=^|\||\()\^", r"(?:\\G|^)", pattern)
+            self.pattern = re.compile(pattern, flags=re.M | re.U | re.V1)
         else:
             self.pattern = pattern
 
@@ -31,71 +33,36 @@ class JavaMatcher:
         else:
             self._end = end
 
-    def _find_and_move_region(self, method: Callable) -> re.Match:
-        # Special case for empty matchers
+    def search(self) -> Optional[re.Match]:
         if self._start > self._text_len:
             return None
 
-        is_match: bool = method == self.pattern.match
-        match: Optional[re.Match] = None
-
-        if not self.use_transparent_bounds:
-            # Gosh, this shit is slow on big texts but it's the only
-            # way I found to emulate ^ matching working together with the
-            # Java's Matcher.region
-            # Pattern TEST_PATTERN = Pattern.compile("^foo");
-            # Matcher beforeMatcher = TEST_PATTERN.matcher("barfoo");
-            # System.out.println(beforeMatcher.lookingAt());
-            # beforeMatcher.region(3, 6);
-            # System.out.println(beforeMatcher.lookingAt());
-
-            match = method(self._text[self._start : min(self._start + self.max_lookaround_len, self._end)])
-        else:
-            for match in self.pattern.finditer(
-                self._text,
-                max(self._start - self.max_lookaround_len, 0),
-                min(self._start + self.max_lookaround_len, self._end),
-            ):
-                match_start: int = match.start()
-
-                if is_match:
-                    if match_start == self._start:
-                        break
-                    elif match_start > self._start:
-                        match = None
-                        break
-
-                else:
-                    if match_start >= self._start:
-                        break
-            else:
-                match = None
+        match = self.pattern.search(self._text, pos=self._start, endpos=self._end)
 
         if match is not None:
-            # Moving to the remainder
-            # Also special case for empty matchers
-
-            if not self.use_transparent_bounds:
-                self.start = self._start + match.start()
-                self.end = self._start + match.end()
-            else:
-                self.start = match.start()
-                self.end = match.end()
-
-            self.region(self._start + match.end() + (1 if match.start() == match.end() else 0))
+            self.start = match.start()
+            self.end = match.end()
+            self._start = self.end + (1 if self.start == self.end else 0)
 
         return match
 
-    def search(self) -> re.Match:
-        return self._find_and_move_region(self.pattern.search)
-
-    def find(self) -> re.Match:
+    def find(self) -> Optional[re.Match]:
         return self.search()
 
-    def match(self) -> re.Match:
-        return self._find_and_move_region(self.pattern.match)
+    def match(self) -> Optional[re.Match]:
+        if self._start > self._text_len:
+            return None
 
-    def looking_at(self) -> re.Match:
+        match = self.pattern.match(self._text, pos=self._start, endpos=self._end)
+
+        if match is not None:
+            self.start = match.start()
+            self.end = match.end()
+            self._start = self.end + (1 if self.start == self.end else 0)
+
+        return match
+
+    def looking_at(self) -> Optional[re.Match]:
         return self.match()
 
     def __str__(self) -> str:
@@ -107,7 +74,7 @@ class RuleMatcher:
     Represents matcher finding subsequent occurrences of one rule.
     """
 
-    def __init__(self, document: SrxDocument, rule: Rule, text: str, max_lookaround_len: int=100) -> None:
+    def __init__(self, document: SrxDocument, rule: Rule, text: str, max_lookaround_len: int = 100) -> None:
         """
         Creates matcher.
         rule rule which will be searched in the text
@@ -120,26 +87,17 @@ class RuleMatcher:
         self.text_len: int = len(text)
         self.before_pattern: re.Regex = document.compile(rule.before_pattern)
         self.after_pattern: re.Regex = document.compile(rule.after_pattern)
-        self.before_matcher: JavaMatcher = JavaMatcher(self.before_pattern, self.text, max_lookaround_len=max_lookaround_len)
-        self.after_matcher: JavaMatcher = JavaMatcher(self.after_pattern, self.text, max_lookaround_len=max_lookaround_len)
-
-        # Adding aux variables to match the behavior of start/end regions
-        # of java matcher
-        self.max_lookaround_len: int = max_lookaround_len
-        self.bm_region_start: int = 0
-        self.bm_region_end: int = self.text_len
-        self.am_region_start: int = 0
-        self.am_region_end: int = self.text_len
-        self.bm_start: int = 0
-        self.am_start: int = 0
-        self.am_end: int = 0
+        self.before_matcher: JavaMatcher = JavaMatcher(
+            self.before_pattern, self.text, max_lookaround_len=max_lookaround_len
+        )
+        self.after_matcher: JavaMatcher = JavaMatcher(
+            self.after_pattern, self.text, max_lookaround_len=max_lookaround_len
+        )
         self.found = True
 
     def find(self, start: Optional[int] = None) -> bool:
         """
-        Finds next rule match after previously found.
-        param start start position
-        return true if rule has been matched
+        Finds next rule match after previously found or from a given start position.
         """
 
         if start is not None:
@@ -180,3 +138,4 @@ class RuleMatcher:
 
     def __str__(self) -> str:
         return f"{self.before_matcher}: {self.after_matcher}"
+

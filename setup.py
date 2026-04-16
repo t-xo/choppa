@@ -8,7 +8,6 @@ long_description = (ROOT / "README.md").read_text(encoding="utf-8")
 requirements = ["regex>=2022.8.17", "xmlschema"]
 version = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
 
-
 setup(
     name="choppa",
     version=version,
@@ -16,8 +15,6 @@ setup(
     python_requires=">=3.7",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    author="Dmitro Chaplynskyi",
-    author_email="chaplinsky.dmitry@gmail.com",
     url="https://github.com/lang-uk/choppa",
     packages=find_namespace_packages(include=["choppa*"]),
     include_package_data=True,

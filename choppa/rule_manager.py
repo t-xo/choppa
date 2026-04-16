@@ -10,7 +10,6 @@ if TYPE_CHECKING:
     from .srx_parser import SrxDocument
 
 
-# TODO: tests?
 
 
 class RuleManager:
@@ -81,9 +80,6 @@ class RuleManager:
 
         pattern_builder: str = "(?:"
 
-        # As Java does not allow infinite length patterns
-        # in lookbehind, before pattern need to be shortened.
-        # TODO: validate if it's still true for Python
         before_pattern: str = finitize(rule.before_pattern, self.max_lookbehind_construct_length)
         after_pattern: str = rule.after_pattern
 

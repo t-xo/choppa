@@ -1,9 +1,9 @@
 # choppa
-Partial python port of java SRX segmenter, [originally written](https://github.com/loomchild/segment) by [Jarek Lipski](https://github.com/loomchild).
+Partial python port of java SRX segmenter.
 
 In a nutshell, it allows you to tokenize texts into sentences (but generally, it's rule-based so that you can chop anything textual).
 
-Shipped with `segment.srx` set of segmentation rules for different languages, crafted by the great team of [languagetool](https://github.com/languagetool-org/languagetool).
+Shipped with `segment.srx` set of segmentation rules for different languages, crafted by the team of [languagetool](https://github.com/languagetool-org/languagetool).
 
 # Quick Start
 
@@ -34,16 +34,7 @@ I also _pythonized_ the code to some extent (by removing some setters/getters, _
 
 
 # Important notes
-First and foremost, I would like to thank Jarek for his work and code quality. My project is not original, it just brings the power of srx segmenter to the python world. And it relies entirely on the work
-done by Jarek.
 
-Please pay attention to the fact that only [Accurate iterator](https://github.com/loomchild/segment#accurate-algorithm) and [Ultimate iterator](https://github.com/loomchild/segment#algorithm) is currently implemented (and I don't have immediate plans to implement the rest). Accurate Iterator should work well on relatively small documents (i.e. **do not use** it on multi GB plaintext corpora!), but [known for some bugs](https://github.com/loomchild/segment/issues/22). Ultimate iterator from the original library is also ported, allowing to parse large documents efficiently while sacrificing accuracy (limiting look-behind patterns, etc). If you need other iterators or are keen to optimize that beast — I'm always open for the pull requests. Similarly, I've only implemented SAX reader for rules and I'm using `xmlschema` package for schema validation. 
+Please pay attention to the fact that only [Accurate iterator](https://github.com/loomchild/segment#accurate-algorithm) and [Ultimate iterator](https://github.com/loomchild/segment#algorithm) is currently implemented. Accurate Iterator should work well on relatively small documents (i.e. **do not use** it on multi GB plaintext corpora!), but [known for some bugs](https://github.com/loomchild/segment/issues/22). Ultimate iterator from the original library is also ported, allowing to parse large documents efficiently while sacrificing accuracy (limiting look-behind patterns, etc). If you need other iterators or are keen to optimize that beast — I'm always open for the pull requests. Similarly, I've only implemented SAX reader for rules and I'm using `xmlschema` package for schema validation. 
 
 Also, I don't have any plan of porting UI at all. You can reuse some of UI's available.
-
-
-# Copyrights and kudos
-* Python port: Dmytro Chaplynskyi
-* Original Java implementation: Jarek Lipski
-* Segmentation rules: Daniel Naber, Jaume Ortolà et al (153 contributors!)
-* Special thanks to Andriy Rysin, the driving force behind the Ukrainian language in LanguageTool

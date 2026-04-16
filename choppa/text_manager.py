@@ -3,10 +3,6 @@ from typing import Optional
 
 
 class TextManager:
-    # Represents text manager.
-    # Responsible for managing current text, reading more text from the reader
-    # and checking if there is more text left.
-    # @author loomchild, Dmytro Chaplynskyi
 
     def __init__(
         self,
@@ -29,7 +25,6 @@ class TextManager:
         self.reader: Optional[io.TextIOBase] = None
         self.text_initialized: bool = False
 
-        # Decide on not initialied texts
         self.text: str = ""
 
         assert (text is None) != (reader is None), "You have to provide either text or reader"
@@ -74,10 +69,8 @@ class TextManager:
         assert self.has_more_text(), "No more text to read."
 
         self.text = (
-            # Text length is equal to buffer size so it is safe.
             self.text[amount:]
             +
-            # Next character cannot be null here, so it is safe.
             self.next_character
             + self.read(amount)
         )
@@ -109,34 +102,11 @@ class TextManager:
         elif count > 0 and count < amount:
             self.next_character = ""
         else:
-            self.result = ""
+            result = ""
             self.next_character = ""
 
         return result
 
-    # TODO: verify that it works properly with stdin
 
 
-#     /**
-#      * Reads specified amount of characters. It is needed because when
-#      * reading from console {@link Reader#read(char[])} it returns
-#      * after first end of line (probably it checks if characters are available).
-#      * @param reader input
-#      * @param buffer buffer where read characters will be stored
-#      * @return number of read characters
-#      */
-#     private int read(Reader reader, char[] buffer) {
-#         try {
-#             int start = 0;
-#             int count;
-#             while (((count = reader.read(buffer, start, buffer.length - start)) != -1)
-#                     && start < buffer.length) {
-#                 start += count;
-#             }
-#             return start;
-#         } catch (IOException e) {
-#             throw new IORuntimeException(e);
-#         }
-#     }
 
-# }

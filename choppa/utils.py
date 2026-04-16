@@ -23,8 +23,6 @@ def remove_block_quotes(pattern: str) -> str:
         if quote:
             if previous_char == "\\" and current_char == "E":
                 quote = False
-                # Need to remove "\\" at the end as it has been added
-                # in previous iteration.
                 pattern_builder = pattern_builder[:-2]
             else:
                 pattern_builder += "\\" + current_char
@@ -32,8 +30,6 @@ def remove_block_quotes(pattern: str) -> str:
         else:
             if previous_char == "\\" and current_char == "Q":
                 quote = True
-                # Need to remove "\" at the end as it has been added
-                # in previous iteration.
                 pattern_builder = pattern_builder[:-1]
             else:
                 pattern_builder += current_char
@@ -68,3 +64,17 @@ def create_lookbehind_pattern(pattern: str, max_lenght: int) -> str:
         return pattern
 
     return "(?<=" + finitize(pattern, max_lenght) + ")"
+
+
+def remove_capturing_groups(pattern: str) -> str:
+    """
+    Replaces capturing groups with non-capturing groups in the given regular
+    expression. As a side effect block quotes are replaced with normal quotes
+    by using {@link #removeBlockQuotes(String)}.
+
+    @param pattern
+    @return modified pattern
+    """
+    new_pattern = remove_block_quotes(pattern)
+    new_pattern = CAPTURING_GROUP_PATTERN.sub("(?:", new_pattern)
+    return new_pattern
