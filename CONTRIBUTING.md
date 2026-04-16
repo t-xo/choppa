@@ -105,3 +105,22 @@ Tips
 To run a subset of tests::
 
     $ python -m pytest -k test_text_longer_than_buffer_rules
+
+Release
+-------
+
+Use `bump2version` to move to the next release version and keep version files in sync.
+
+1. Install release tooling:
+    ```bash
+    python -m pip install bump2version build
+    ```
+2. Bump the version:
+    ```bash
+    bump2version patch
+    ```
+    You can replace `patch` with `minor` or `major`.
+3. Build distribution artifacts:
+    ```bash
+    python -m build
+    ```
