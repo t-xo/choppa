@@ -24,7 +24,7 @@ class ExtensiveTest(unittest.TestCase):
 
     def test_srx1_transformation(self):
         # A simple SRX 1.0 document
-        srx1_content = """<?xml version="1.0" encoding="UTF-8"?>
+        srx1_content = r"""<?xml version="1.0" encoding="UTF-8"?>
 <srx version="1.0">
     <header segmentsubflows="yes"/>
     <body>
@@ -54,7 +54,7 @@ class ExtensiveTest(unittest.TestCase):
         self.assertEqual(lang_rules[0].rules[0].before_pattern, r"\.")
 
     def test_fast_iterator_parity(self):
-        srx_content = """<?xml version="1.0" encoding="UTF-8"?>
+        srx_content = r"""<?xml version="1.0" encoding="UTF-8"?>
 <srx version="2.0">
     <header cascade="yes"/>
     <body>

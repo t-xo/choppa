@@ -1,7 +1,7 @@
 import pathlib
 import regex as re  # type: ignore
 from xml.sax.handler import ContentHandler
-from xml.sax import parse as sax_parse
+from xml.sax import parse as sax_parse, parseString as sax_parseString
 
 from typing import Union, Dict, List, Optional
 import xmlschema  # type: ignore
@@ -29,12 +29,18 @@ class SrxDocument:
         self.rule_manager_cache: Dict[str, RuleManager] = {}
 
         if ruleset is not None:
+            ruleset_str = str(ruleset)
+            is_xml_string = ruleset_str.lstrip().startswith('<')
+
             if validate_ruleset is not None:
                 schema: xmlschema.XMLSchema = xmlschema.XMLSchema(str(validate_ruleset))
 
-                schema.validate(str(ruleset))
+                schema.validate(ruleset_str)
 
-            sax_parse(str(ruleset), SRXHandler(document=self))
+            if is_xml_string:
+                sax_parseString(ruleset_str.encode('utf-8'), SRXHandler(document=self))
+            else:
+                sax_parse(ruleset_str, SRXHandler(document=self))
 
     def add_language_map(self, pattern: str, language_rule: LanguageRule) -> None:
         """
@@ -42,11 +48,11 @@ class SrxDocument:
         """
         self.language_map_list.append(LanguageMap(pattern, language_rule))
 
-    def compile(self, regex: str) -> re.Regex:
+    def compile(self, regex: str, flags: int = re.U | re.V1) -> re.Regex:
         """
         Compiles given pattern as regex.Regex (V1), caches it
         """
-        key: str = "PATTERN_" + regex
+        key: str = f"PATTERN_{regex}_{flags}"
 
         pattern: Optional[re.Regex] = self.regex_cache.get(key, None)
 
@@ -56,8 +62,9 @@ class SrxDocument:
             # More details can be found here:
             # https://github.com/mrabarnett/mrab-regex/issues/477#issuecomment-1218409217
             regex = regex.replace(r"\h", r"\p{H}").replace(r"\v", r"\p{V}")
+            regex = re.sub(r"(?<!\\)(?<=^|\||\()\^", r"(?:\\G|^)", regex)
 
-            pattern = re.compile(regex, flags=re.M | re.U | re.V1)
+            pattern = re.compile(regex, flags=flags)
             self.regex_cache[key] = pattern
 
         return pattern
