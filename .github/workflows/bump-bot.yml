@@ -1,21 +1,38 @@
 name: Bump Bot
 
 on:
-  push:
-    branches:
-      - main
+  workflow_run:
+    workflows:
+      - Package Bot
+    types:
+      - completed
+  workflow_dispatch:
 
 permissions:
   contents: write
 
+concurrency:
+  group: bump-main
+  cancel-in-progress: true
+
 jobs:
   bump-version:
-    if: github.actor != 'github-actions[bot]' && !startsWith(github.event.head_commit.message, 'Bump version') && !contains(github.event.head_commit.message, '[no-bump]')
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (
+        github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.event == 'push' &&
+        github.event.workflow_run.head_branch == 'main' &&
+        github.event.workflow_run.actor.login != 'github-actions[bot]' &&
+        !startsWith(github.event.workflow_run.head_commit.message || '', 'Bump version') &&
+        !contains(github.event.workflow_run.head_commit.message || '', '[no-bump]')
+      )
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
+          ref: main
           fetch-depth: 0
 
       - name: Set up Python
