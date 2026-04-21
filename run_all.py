@@ -41,12 +41,15 @@ def install_packages(python, wheel, root):
         subprocess.check_call([str(python), "-m", "pip", "install", "regex", "xmlschema"])
 
 def run_tests(python, root):
+    print("Running tests...")
+    subprocess.check_call([str(python), "-m", "unittest", "discover", "tests"], cwd=root)
     print("Running test_choppa.py...")
-    subprocess.check_call([str(python), str(root / "choppa" / "test_choppa.py")])
+    subprocess.check_call([str(python), str(root / "test_choppa.py")])
 
 def run_diff_stats(python, root):
     print("\nDiff stats:")
     subprocess.check_call([str(python), str(root / "diff_stats.py")])
+
 
 def main():
     root = Path(__file__).parent.resolve()

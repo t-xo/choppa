@@ -153,3 +153,4 @@ cython_debug/
 # Custom for choppa
 scratch/
 VERSION_tmp
+test_resources/

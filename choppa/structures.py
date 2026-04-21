@@ -1,5 +1,5 @@
 import regex as re  # type: ignore
-from typing import NamedTuple, List, Optional
+from typing import NamedTuple, List, Optional, Pattern
 
 
 class Rule(NamedTuple):
@@ -35,7 +35,7 @@ class LanguageMap:
         language_rule language rule
         """
 
-        self.language_pattern: re.Regex = re.compile(pattern)
+        self.language_pattern: Pattern = re.compile(pattern)
         self.language_rule = language_rule
 
     def matches(self, language_code: str) -> bool:

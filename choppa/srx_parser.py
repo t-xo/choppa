@@ -3,7 +3,7 @@ import regex as re  # type: ignore
 from xml.sax.handler import ContentHandler
 from xml.sax import parse as sax_parse, parseString as sax_parseString
 
-from typing import Union, Dict, List, Optional
+from typing import Union, Dict, List, Optional, Pattern
 import xmlschema  # type: ignore
 
 from .structures import Rule, LanguageRule, LanguageMap
@@ -14,8 +14,8 @@ class SrxDocument:
     def __init__(
         self,
         cascade: bool = True,
-        ruleset: Union[pathlib.Path, None, str] = None,
-        validate_ruleset: Union[pathlib.Path, None, str] = None,
+        ruleset: Optional[Union[pathlib.Path, str]] = None,
+        validate_ruleset: Optional[Union[pathlib.Path, str]] = None,
     ) -> None:
         """
         Creates empty document.
@@ -25,7 +25,7 @@ class SrxDocument:
         """
         self.cascade = cascade
         self.language_map_list: List[LanguageMap] = []
-        self.regex_cache: Dict[str, re.Regex] = {}
+        self.regex_cache = {}
         self.rule_manager_cache: Dict[str, RuleManager] = {}
 
         if ruleset is not None:
@@ -48,14 +48,12 @@ class SrxDocument:
         """
         self.language_map_list.append(LanguageMap(pattern, language_rule))
 
-    def compile(self, regex: str, flags: int = re.U | re.V1) -> re.Regex:
+    def compile(self, regex: str, flags: int = re.U | re.V1):
         """
         Compiles given pattern as regex.Regex (V1), caches it
         """
         key: str = f"PATTERN_{regex}_{flags}"
-
-        pattern: Optional[re.Regex] = self.regex_cache.get(key, None)
-
+        pattern = self.regex_cache.get(key, None)
         if pattern is None:
             # Fixing irregularities in \h\v behavior
             # Both \p{H} and \p{V} were added in regex 2022.8.17
@@ -63,23 +61,18 @@ class SrxDocument:
             # https://github.com/mrabarnett/mrab-regex/issues/477#issuecomment-1218409217
             regex = regex.replace(r"\h", r"\p{H}").replace(r"\v", r"\p{V}")
             regex = re.sub(r"(?<!\\)(?<=^|\||\()\^", r"(?:\\G|^)", regex)
-
             pattern = re.compile(regex, flags=flags)
             self.regex_cache[key] = pattern
-
         return pattern
 
     def get_rule_manager(
         self, language_rule_list: List[LanguageRule], max_lookbehind_construct_length: int
     ) -> RuleManager:
         key: str = f"RULE_MANAGER_{language_rule_list}_{max_lookbehind_construct_length}"
-
-        rule_manager: Optional[RuleManager] = self.rule_manager_cache.get(key, None)
-
+        rule_manager = self.rule_manager_cache.get(key, None)
         if rule_manager is None:
             rule_manager = RuleManager(self, language_rule_list, max_lookbehind_construct_length)
             self.rule_manager_cache[key] = rule_manager
-
         return rule_manager
 
     def get_language_rule_list(self, language_code: str) -> List[LanguageRule]:
@@ -111,8 +104,8 @@ class SRXHandler(ContentHandler):
 
     def __init__(self, document: SrxDocument) -> None:
         self.break_rule: bool = False
-        self.before_break: list = []
-        self.after_break: list = []
+        self.before_break: List[str] = []
+        self.after_break: List[str] = []
         self.language_rule: Optional[LanguageRule] = None
         self.language_rule_map: Dict[str, LanguageRule] = {}
         self.element_name: Optional[str] = None
@@ -132,13 +125,17 @@ class SRXHandler(ContentHandler):
         if name == "header":
             self.document.cascade = attrs.get("cascade") == "yes"
         elif name == "languagerule":
-            language_rule_name: str = attrs.get("languagerulename")
-            self.language_rule = LanguageRule(language_rule_name)
-            self.language_rule_map[language_rule_name] = self.language_rule
+            language_rule_name = attrs.get("languagerulename")
+            if language_rule_name is not None:
+                self.language_rule = LanguageRule(language_rule_name)
+                self.language_rule_map[language_rule_name] = self.language_rule
         elif name == "languagemap":
-            language_pattern: str = attrs.get("languagepattern")
-            language_rule_name: str = attrs.get("languagerulename")
-            self.document.add_language_map(language_pattern, self.language_rule_map.get(language_rule_name))
+            language_pattern = attrs.get("languagepattern")
+            language_rule_name = attrs.get("languagerulename")
+            if language_pattern is not None and language_rule_name is not None:
+                language_rule = self.language_rule_map.get(language_rule_name)
+                if language_rule is not None:
+                    self.document.add_language_map(language_pattern, language_rule)
         elif name == "rule":
             self.break_rule = attrs.get("break") != "no"
 
@@ -147,7 +144,8 @@ class SRXHandler(ContentHandler):
 
         if name == "rule":
             rule = Rule(self.break_rule, "".join(self.before_break), "".join(self.after_break))
-            self.language_rule.add_rule(rule)
+            if self.language_rule is not None:
+                self.language_rule.add_rule(rule)
             self.reset_rule()
 
     def characters(self, content):

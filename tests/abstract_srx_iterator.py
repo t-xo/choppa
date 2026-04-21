@@ -7,7 +7,7 @@ from choppa.structures import LanguageRule, Rule
 from choppa.iterators import AbstractTextIterator
 
 
-class AbstractSrxTextIterator(unittest.TestCase):
+class AbstractSrxTextIterator:
     """
     Segmentation text used in all text iterator tests.
     Inheriting tests must implement get_text_iterator abstract method
