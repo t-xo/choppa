@@ -1,7 +1,7 @@
 import unittest
 from typing import List
 
-from xmlschema.validators.exceptions import XMLSchemaValidationError  # type: ignore
+from xmlschema.validators.exceptions import XMLSchemaValidationError
 
 from choppa.srx_parser import SrxDocument
 from choppa.structures import LanguageRule, Rule

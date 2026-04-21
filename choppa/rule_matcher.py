@@ -1,4 +1,4 @@
-import regex as re  # type: ignore
+import regex as re
 from typing import Union, Callable, Optional
 from .srx_parser import SrxDocument
 from .structures import Rule

@@ -11,8 +11,6 @@ class ExtensiveTest(unittest.TestCase):
         self.assertEqual(remove_capturing_groups(r"(abc)"), r"(?:abc)")
         self.assertEqual(remove_capturing_groups(r"(?:abc)"), r"(?:abc)")
         self.assertEqual(remove_capturing_groups(r"\((abc)"), r"\((?:abc)")
-        # \Q \E handled by side effect (escapes every char including alphanumeric)
-        # Matches Java's Util.java implementation
         self.assertEqual(remove_capturing_groups(r"\Q(abc)\E"), r"\(\a\b\c\)")
 
     def test_srx_version_detection(self):
@@ -23,7 +21,6 @@ class ExtensiveTest(unittest.TestCase):
         self.assertEqual(SrxVersion.detect(io.StringIO(srx2)), SrxVersion.VERSION_2_0)
 
     def test_srx1_transformation(self):
-        # A simple SRX 1.0 document
         srx1_content = r"""<?xml version="1.0" encoding="UTF-8"?>
 <srx version="1.0">
     <header segmentsubflows="yes"/>
@@ -43,9 +40,8 @@ class ExtensiveTest(unittest.TestCase):
         </maprules>
     </body>
 </srx>"""
-        # Parsing this should automatically transform it
         document = SrxDocument(ruleset=srx1_content)
-        self.assertEqual(document.cascade, False) # cascade="no" is added by transformer
+        self.assertEqual(document.cascade, False)
         
         lang_rules = document.get_language_rule_list("en")
         self.assertEqual(len(lang_rules), 1)
@@ -78,11 +74,9 @@ class ExtensiveTest(unittest.TestCase):
         document = SrxDocument(ruleset=srx_content)
         text = "Mr. Smith is here. He is happy."
         
-        # Standard Iterator
         it_std = SrxTextIterator(document, "en", text)
         segments_std = list(it_std)
         
-        # Fast Iterator
         it_fast = FastTextIterator(document, "en", text)
         segments_fast = list(it_fast)
         

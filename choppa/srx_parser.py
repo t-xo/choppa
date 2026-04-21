@@ -1,10 +1,10 @@
 import pathlib
-import regex as re  # type: ignore
+import regex as re
 from xml.sax.handler import ContentHandler
 from xml.sax import parse as sax_parse, parseString as sax_parseString
 
 from typing import Union, Dict, List, Optional, Pattern
-import xmlschema  # type: ignore
+import xmlschema
 
 from .structures import Rule, LanguageRule, LanguageMap
 from .rule_manager import RuleManager
@@ -55,10 +55,6 @@ class SrxDocument:
         key: str = f"PATTERN_{regex}_{flags}"
         pattern = self.regex_cache.get(key, None)
         if pattern is None:
-            # Fixing irregularities in \h\v behavior
-            # Both \p{H} and \p{V} were added in regex 2022.8.17
-            # More details can be found here:
-            # https://github.com/mrabarnett/mrab-regex/issues/477#issuecomment-1218409217
             regex = regex.replace(r"\h", r"\p{H}").replace(r"\v", r"\p{V}")
             regex = re.sub(r"(?<!\\)(?<=^|\||\()\^", r"(?:\\G|^)", regex)
             pattern = re.compile(regex, flags=flags)

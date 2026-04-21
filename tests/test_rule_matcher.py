@@ -65,15 +65,6 @@ class RuleMatcherTest(unittest.TestCase):
         self.assertEqual(matcher.end, 9)
 
     def test_java_matcher_empty(self):
-        # Emulates following behavior
-        # Pattern EMPTY_PATTERN = Pattern.compile("");
-        # Matcher beforeMatcher = EMPTY_PATTERN.matcher("123");
-
-        # while (beforeMatcher.find()) {
-        #     System.out.println(beforeMatcher.start());
-        #     System.out.println(beforeMatcher.end());
-        # }
-
         matcher: JavaMatcher = JavaMatcher(pattern=r"", text="123")
 
         match = matcher.find()
@@ -96,9 +87,6 @@ class RuleMatcherTest(unittest.TestCase):
         self.assertEqual(match, None)
 
     def test_caret_matcher(self):
-        # Emulates behavior of the Java matcher, when
-        # caret matcher can match the beginning of the region
-
         matcher: JavaMatcher = JavaMatcher(pattern=r"^\d", text="123")
 
         match = matcher.find()

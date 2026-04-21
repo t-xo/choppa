@@ -4,11 +4,11 @@ from pathlib import Path
 from choppa.srx_parser import SrxDocument
 from choppa.iterators import SrxTextIterator
 
-BASE_DIR = Path(__file__).resolve().parent.parent
+BASE_DIR = Path(__file__).resolve().parent
 
-INPUT_DIR = BASE_DIR / "choppa" / "test_resources"
+INPUT_DIR = BASE_DIR / "test_resources"
 OUTPUT_DIR = INPUT_DIR / "out"
-RULESET = BASE_DIR / "choppa" / "segment.srx"
+RULESET = BASE_DIR / "segment.srx"
 
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 

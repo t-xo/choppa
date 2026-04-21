@@ -1,4 +1,4 @@
-import regex as re  # type: ignore
+import regex as re
 
 STAR_PATTERN: re.Regex = re.compile("(?<=(?<!\\\\)(?:\\\\\\\\){0,100})\\*")
 PLUS_PATTERN: re.Regex = re.compile("(?<=(?<!\\\\)(?:\\\\\\\\){0,100})(?<![\\?\\*\\+]|\\{[0-9],?[0-9]?\\}?\\})\\+")

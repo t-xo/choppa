@@ -47,7 +47,7 @@ class SrxParserTest(unittest.TestCase):
         self.split_helper([" — К. : Наук. думка, 1990."], document)
         self.split_helper(["Маркс К. «Показова держава»"], document)
 
-        #   latin I
+                   
         self.split_helper(["М. Л. Гончарука, I. О. Денисюка"], document)
         self.split_helper(["I. I. Дорошенко"], document)
 
@@ -129,7 +129,7 @@ class SrxParserTest(unittest.TestCase):
         )
 
         self.split_helper(["– С.\u202f5-7."], document)
-        # still no split for initials
+                                     
         self.split_helper(["товариш С.\u202fОхримович."], document)
         self.split_helper(["З особливим обуренням сприймав С.\u202f Шелухин легітимізацію"], document)
         self.split_helper(["відбув у тюрмах.\u202f", "Нещодавно письменник"], document)

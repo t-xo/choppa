@@ -17,14 +17,15 @@ def build_latest_wheel(root):
     dist = root / "dist"
     venv = root / "venv"
     python = venv / "Scripts" / "python.exe"
-    # Ensure build tools are present
-    subprocess.check_call([str(python), "-m", "pip", "install", "--upgrade", "setuptools", "wheel"])
+    subprocess.check_call([str(python), "-m", "pip", "install", "--upgrade", "setuptools", "wheel", "build"])
     if dist.exists():
         print("Removing old wheels...")
         for f in dist.glob("*.whl"):
             f.unlink()
+    else:
+        dist.mkdir(parents=True, exist_ok=True)
     print("Building latest wheel...")
-    subprocess.check_call([str(python), "setup.py", "bdist_wheel"], cwd=root)
+    subprocess.check_call([str(python), "-m", "build", "--wheel", "--outdir", str(dist)], cwd=root)
     wheels = sorted(dist.glob("choppa-*.whl"), key=os.path.getmtime, reverse=True)
     if not wheels:
         print("No wheel built!")

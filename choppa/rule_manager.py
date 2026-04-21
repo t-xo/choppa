@@ -1,4 +1,4 @@
-import regex as re  # type: ignore
+import regex as re
 from typing import List, Dict, Optional
 
 from choppa.structures import LanguageRule, Rule

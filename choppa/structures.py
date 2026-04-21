@@ -1,4 +1,4 @@
-import regex as re  # type: ignore
+import regex as re
 from typing import NamedTuple, List, Optional, Pattern
 
 
