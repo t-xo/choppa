@@ -154,3 +154,4 @@ cython_debug/
 scratch/
 VERSION_tmp
 test_resources/
+segment.srx
