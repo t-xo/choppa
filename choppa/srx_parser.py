@@ -40,7 +40,7 @@ class SrxDocument:
             if is_xml_string:
                 sax_parseString(ruleset_str.encode('utf-8'), SRXHandler(document=self))
             else:
-                sax_parse(ruleset_str, SRXHandler(document=self))
+                sax_parse(pathlib.Path(ruleset_str).resolve().as_uri(), SRXHandler(document=self))
 
     def add_language_map(self, pattern: str, language_rule: LanguageRule) -> None:
         """
