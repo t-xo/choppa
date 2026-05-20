@@ -10,8 +10,6 @@ INPUT_DIR = BASE_DIR / "test_resources"
 OUTPUT_DIR = INPUT_DIR / "out"
 RULESET = BASE_DIR / "segment.srx"
 
-OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-
 pattern = re.compile(r"^(?P<lang>[a-z]{2})_test_in\.txt$")
 
 
@@ -30,9 +28,13 @@ def process_file(input_file: Path, output_file: Path, document: SrxDocument, lan
 
 def main():
     if not INPUT_DIR.exists():
-        raise FileNotFoundError(f"INPUT_DIR not found: {INPUT_DIR}")
+        print(f"Skipped: INPUT_DIR not found: {INPUT_DIR}")
+        return
     if not RULESET.exists():
-        raise FileNotFoundError(f"RULESET not found: {RULESET}")
+        print(f"Skipped: RULESET not found: {RULESET}")
+        return
+
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
     document = SrxDocument(ruleset=str(RULESET))
 

@@ -1,122 +1,15 @@
 import io
-import regex as re
-from typing import List, Union, Optional
+from os import PathLike
+from typing import Any, Iterable, List, Tuple, Union, Optional
 
-from .structures import LanguageRule, Rule
+from .structures import LanguageRule
 from .srx_parser import SrxDocument
-from .rule_matcher import RuleMatcher, JavaMatcher
+from .rule_matcher import RuleMatcher, rule_matches_at
 from .text_manager import TextManager
 from .rule_manager import RuleManager
-from .utils import create_lookbehind_pattern
 
 
 MAX_INT_VALUE: int = 2 ** 31 - 1
-
-
-class MergedPattern:
-    def __init__(
-        self,
-        language_rule_list: List["LanguageRule"],
-        max_lookbehind_construct_length: int,
-        default_pattern_flags: int = 0,
-    ) -> None:
-        from .utils import remove_capturing_groups, finitize
-
-        self.max_lookbehind_construct_length = max_lookbehind_construct_length
-        self.default_pattern_flags = default_pattern_flags
-        self.breaking_pattern: Optional[re.Regex] = None
-        self.non_breaking_pattern_list: List[re.Regex] = []
-        self.breaking_rule_index_list: List[int] = []
-
-        breaking_pattern_builder: str = ""
-        breaking_rule_index: int = 0
-
-        rule_list = self.extract_rules(language_rule_list)
-        rule_group_list = self.group_rules(rule_list)
-
-        for rule_group in rule_group_list:
-            if rule_group[0].is_break:
-                if breaking_pattern_builder:
-                    breaking_pattern_builder += "|"
-                
-                breaking_group_pattern = self.create_breaking_pattern(rule_group)
-                breaking_pattern_builder += breaking_group_pattern
-                breaking_rule_index += len(rule_group)
-            else:
-                nb_pattern_str = self.create_non_breaking_pattern(rule_group)
-                self.non_breaking_pattern_list.append(
-                    re.compile(nb_pattern_str, flags=re.U | re.V1 | self.default_pattern_flags)
-                )
-                self.breaking_rule_index_list.append(breaking_rule_index)
-
-        if breaking_pattern_builder:
-            self.breaking_pattern = re.compile(
-                breaking_pattern_builder, flags=re.U | re.V1 | self.default_pattern_flags
-            )
-
-    def get_non_breaking_pattern_list(self, breaking_rule_index: int) -> List[re.Regex]:
-        result = []
-        for i, current_breaking_rule_index in enumerate(self.breaking_rule_index_list):
-            if current_breaking_rule_index >= breaking_rule_index:
-                break
-            result.append(self.non_breaking_pattern_list[i])
-        return result
-
-    def extract_rules(self, language_rule_list: List["LanguageRule"]) -> List["Rule"]:
-        rules = []
-        for lr in language_rule_list:
-            rules.extend(lr.rules)
-        return rules
-
-    def group_rules(self, rule_list: List["Rule"]) -> List[List["Rule"]]:
-        groups = []
-        if not rule_list:
-            return groups
-        
-        current_group = [rule_list[0]]
-        groups.append(current_group)
-        for i in range(1, len(rule_list)):
-            if rule_list[i].is_break == rule_list[i-1].is_break:
-                current_group.append(rule_list[i])
-            else:
-                current_group = [rule_list[i]]
-                groups.append(current_group)
-        return groups
-
-    def create_breaking_pattern(self, rule_list: List["Rule"]) -> str:
-        from .utils import remove_capturing_groups
-        builder = ""
-        for rule in rule_list:
-            if builder:
-                builder += "|"
-            
-            before = remove_capturing_groups(rule.before_pattern)
-            after = remove_capturing_groups(rule.after_pattern)
-            
-            builder += "(?="
-            builder += before
-            builder += "()"
-            builder += after
-            builder += ")"
-        return builder
-
-    def create_non_breaking_pattern(self, rule_list: List["Rule"]) -> str:
-        from .utils import finitize
-        builder = ""
-        for rule in rule_list:
-            if builder:
-                builder += "|"
-            
-            before = finitize(rule.before_pattern, self.max_lookbehind_construct_length)
-            after = rule.after_pattern
-            
-            builder += "(?:"
-            if before:
-                builder += f"(?<={before})"
-            if after:
-                builder += f"(?={after})"
-            builder += ")"
-        return builder
 
 
 class AbstractTextIterator:
@@ -126,7 +19,7 @@ class AbstractTextIterator:
     """
 
     DEFAULT_BUFFER_LENGTH: int = 1024 * 1024
-    DEFAULT_MAX_LOOKBEHIND_CONSTRUCT_LENGTH: int = 100
+    DEFAULT_MAX_BOUNDARY_CONTEXT_LENGTH: int = 100
 
     def to_string(self, language_rule_list: List[LanguageRule]) -> str:
         result = []
@@ -143,86 +36,13 @@ class AbstractTextIterator:
         raise StopIteration
 
 
-class FastTextIterator(AbstractTextIterator):
-    def __init__(
-        self,
-        document: "SrxDocument",
-        language_code: str,
-        text: str,
-        max_lookbehind_construct_length: int = AbstractTextIterator.DEFAULT_MAX_LOOKBEHIND_CONSTRUCT_LENGTH,
-        default_pattern_flags: int = 0,
-    ) -> None:
-        self.text = text
-        self.segment: Optional[str] = None
-        self.start_position: int = 0
-        self.end_position: int = 0
-        self.default_pattern_flags = default_pattern_flags
-
-        self.language_rule_list = document.get_language_rule_list(language_code)
-        
-        key = f"MERGED_PATTERN_{self.language_rule_list}_{max_lookbehind_construct_length}_{self.default_pattern_flags}"
-        if key in document.regex_cache:
-            self.merged_pattern = document.regex_cache[key]
-        else:
-            self.merged_pattern = MergedPattern(
-                self.language_rule_list, max_lookbehind_construct_length, self.default_pattern_flags
-            )
-            document.regex_cache[key] = self.merged_pattern
-
-    def __next__(self) -> str:
-        if self.start_position < len(self.text):
-            found = False
-            if self.merged_pattern.breaking_pattern:
-                pos = self.start_position
-                while not found:
-                    match = self.merged_pattern.breaking_pattern.search(self.text, pos=pos)
-                    if not match:
-                        break
-                    
-                    breaking_rule_index = -1
-                    for i in range(1, match.re.groups + 1):
-                        if match.group(i) is not None:
-                            breaking_rule_index = i
-                            break
-                    
-                    if breaking_rule_index == -1:
-                        pos = match.end() + 1
-                        continue
-
-                    self.end_position = match.end(breaking_rule_index)
-
-                    if self.end_position > self.start_position:
-                        found = True
-                        
-                        active_exceptions = self.merged_pattern.get_non_breaking_pattern_list(breaking_rule_index)
-                        for nb_pattern in active_exceptions:
-                            nb_match = nb_pattern.match(self.text, pos=self.end_position)
-                            if nb_match:
-                                found = False
-                                break
-                        
-                        if not found:
-                            pos = self.end_position
-                    else:
-                        pos += 1
-
-            if not found:
-                self.end_position = len(self.text)
-            
-            self.segment = self.text[self.start_position : self.end_position]
-            self.start_position = self.end_position
-            return self.segment
-        else:
-            raise StopIteration
-
-
 class AccurateSrxTextIterator(AbstractTextIterator):
     def __init__(
         self,
         document: SrxDocument,
         language_code: str,
         text: str,
-        max_lookbehind_construct_length: int = AbstractTextIterator.DEFAULT_MAX_LOOKBEHIND_CONSTRUCT_LENGTH,
+        max_boundary_context_length: int = AbstractTextIterator.DEFAULT_MAX_BOUNDARY_CONTEXT_LENGTH,
     ) -> None:
         """
         Legacy alert: this is the implementation of the legacy accurate iterator
@@ -244,20 +64,12 @@ class AccurateSrxTextIterator(AbstractTextIterator):
         self.start_position: int = 0
         self.end_position: int = 0
 
+        self.document = document
+        self.rule_manager: RuleManager = self.document.get_rule_manager(
+            self.language_rule_list, max_boundary_context_length
+        )
         self.rule_matcher_list: List[RuleMatcher] = []
-        for language_rule in self.language_rule_list:
-            for rule in language_rule.rules:
-                if not rule.is_break:
-                    rule = Rule(
-                        is_break=rule.is_break,
-                        before_pattern=create_lookbehind_pattern(rule.before_pattern, max_lookbehind_construct_length),
-                        after_pattern=rule.after_pattern,
-                    )
-
-                matcher: RuleMatcher = RuleMatcher(
-                    document=document, rule=rule, text=text, max_lookaround_len=max_lookbehind_construct_length
-                )
-                self.rule_matcher_list.append(matcher)
+        self._boundary_cache = {}
 
     def __next__(self) -> str:
         """
@@ -274,9 +86,10 @@ class AccurateSrxTextIterator(AbstractTextIterator):
             while len(self.rule_matcher_list) and not found:
                 min_matcher: RuleMatcher = self.get_min_matcher()
                 self.end_position = min_matcher.get_break_position()
-                if min_matcher.rule.is_break and self.end_position > self.start_position:
-                    found = True
-                    self.cut_matchers()
+                if self.end_position > self.start_position:
+                    found = self.is_exception(min_matcher)
+                    if found:
+                        self.cut_matchers()
 
                 self.move_matchers()
 
@@ -297,6 +110,11 @@ class AccurateSrxTextIterator(AbstractTextIterator):
         return self.start_position < len(self.text)
 
     def init_matchers(self) -> None:
+        self.rule_matcher_list = []
+        for rule in self.rule_manager.break_rule_list:
+            matcher = RuleMatcher(document=self.document, rule=rule, text=self.text)
+            self.rule_matcher_list.append(matcher)
+
         for matcher in self.rule_matcher_list[:]:
             matcher.find()
             if matcher.hit_end():
@@ -338,6 +156,168 @@ class AccurateSrxTextIterator(AbstractTextIterator):
                 min_matcher = matcher
         return min_matcher
 
+    def is_exception(self, rule_matcher: RuleMatcher) -> bool:
+        for rule in self.rule_manager.get_exception_rules(rule_matcher.rule):
+            if rule_matches_at(self.document, rule, self.text, rule_matcher.get_break_position(), self._boundary_cache):
+                return False
+        return True
+
+
+class FastTextIterator(AccurateSrxTextIterator):
+    """
+    Backward-compatible iterator name that uses direct SRX boundary matching.
+    """
+
+    def __init__(
+        self,
+        document: SrxDocument,
+        language_code: str,
+        text: str,
+        max_boundary_context_length: int = AbstractTextIterator.DEFAULT_MAX_BOUNDARY_CONTEXT_LENGTH,
+        default_pattern_flags: int = 0,
+    ) -> None:
+        self.default_pattern_flags = default_pattern_flags
+        super().__init__(document, language_code, text, max_boundary_context_length)
+
+
+class LargeFileSrxTextIterator(AbstractTextIterator):
+    """
+    Iterator optimized for one very large input file.
+
+    It opens path-like sources lazily and delegates segmentation to
+    SrxTextIterator's buffered reader path, so the full file does not need to be
+    loaded into memory.
+    """
+
+    DEFAULT_BUFFER_LENGTH: int = 8 * 1024 * 1024
+    DEFAULT_MARGIN: int = 8 * 1024
+
+    def __init__(
+        self,
+        document: SrxDocument,
+        language_code: str,
+        source: Union[str, PathLike, io.TextIOBase],
+        encoding: str = "utf-8",
+        buffer_length: int = DEFAULT_BUFFER_LENGTH,
+        margin: int = DEFAULT_MARGIN,
+        max_boundary_context_length: int = AbstractTextIterator.DEFAULT_MAX_BOUNDARY_CONTEXT_LENGTH,
+        default_pattern_flags: int = 0,
+    ) -> None:
+        if buffer_length <= margin:
+            raise ValueError("buffer_length must be larger than margin.")
+
+        self._owns_reader = isinstance(source, (str, PathLike))
+        self._reader = (
+            open(source, "r", encoding=encoding)
+            if self._owns_reader
+            else source
+        )
+        self._iterator = SrxTextIterator(
+            document=document,
+            language_code=language_code,
+            text=self._reader,
+            buffer_length=buffer_length,
+            max_boundary_context_length=max_boundary_context_length,
+            margin=margin,
+            default_pattern_flags=default_pattern_flags,
+        )
+
+    def __next__(self) -> str:
+        try:
+            return next(self._iterator)
+        except StopIteration:
+            self.close()
+            raise
+
+    def has_next(self) -> bool:
+        return self._iterator.has_next()
+
+    def close(self) -> None:
+        if self._owns_reader and not self._reader.closed:
+            self._reader.close()
+
+    def __enter__(self) -> "LargeFileSrxTextIterator":
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback) -> None:
+        self.close()
+
+
+class ManyFilesSrxTextIterator(AbstractTextIterator):
+    """
+    Iterator optimized for very large batches of smaller files.
+
+    Each file is read and segmented independently, then released before the next
+    file is loaded. The supplied SrxDocument is reused for the entire batch, so
+    compiled SRX patterns and rule managers stay cached across files.
+    """
+
+    def __init__(
+        self,
+        document: SrxDocument,
+        language_code: str,
+        sources: Iterable[Union[str, PathLike, io.TextIOBase, Tuple[Any, str]]],
+        encoding: str = "utf-8",
+        include_source: bool = False,
+        skip_empty: bool = True,
+        max_boundary_context_length: int = AbstractTextIterator.DEFAULT_MAX_BOUNDARY_CONTEXT_LENGTH,
+    ) -> None:
+        self.document = document
+        self.language_code = language_code
+        self.sources = iter(sources)
+        self.encoding = encoding
+        self.include_source = include_source
+        self.skip_empty = skip_empty
+        self.max_boundary_context_length = max_boundary_context_length
+        self._source_index = 0
+        self._current_source: Any = None
+        self._current_iterator: Optional[AccurateSrxTextIterator] = None
+
+    def __next__(self):
+        while True:
+            if self._current_iterator is not None:
+                try:
+                    segment = next(self._current_iterator)
+                    if self.include_source:
+                        return self._current_source, segment
+                    return segment
+                except StopIteration:
+                    self._current_iterator = None
+                    self._current_source = None
+
+            self._load_next_source()
+
+    def _load_next_source(self) -> None:
+        while True:
+            source = next(self.sources)
+            self._source_index += 1
+            source_id, text = self._read_source(source)
+
+            if text or not self.skip_empty:
+                self._current_source = source_id
+                self._current_iterator = AccurateSrxTextIterator(
+                    self.document,
+                    self.language_code,
+                    text,
+                    self.max_boundary_context_length,
+                )
+                return
+
+    def _read_source(
+        self,
+        source: Union[str, PathLike, io.TextIOBase, Tuple[Any, str]],
+    ) -> Tuple[Any, str]:
+        if isinstance(source, tuple):
+            source_id, text = source
+            return source_id, text
+
+        if isinstance(source, (str, PathLike)):
+            with open(source, "r", encoding=self.encoding) as reader:
+                return source, reader.read()
+
+        source_id = getattr(source, "name", self._source_index)
+        return source_id, source.read()
+
 
 class SrxTextIterator(AbstractTextIterator):
     """
@@ -370,9 +350,8 @@ class SrxTextIterator(AbstractTextIterator):
     Streaming version has a limitation that read buffer must be at least as long
     as any segment in the text.
 
-    As this algorithm uses lookbehind extensively but Java does not permit
-    infinite regular expressions in lookbehind, so some patterns are finitized.
-    For example a* pattern will be changed to something like a{0,100}.
+    The Python implementation checks SRX exception rules at candidate
+    boundaries directly.
 
     @author loomchild, Dmytro Chaplynskyi
     """
@@ -385,7 +364,7 @@ class SrxTextIterator(AbstractTextIterator):
         language_code: str,
         text: Union[str, io.TextIOBase],
         buffer_length: int = AbstractTextIterator.DEFAULT_BUFFER_LENGTH,
-        max_lookbehind_construct_length: int = AbstractTextIterator.DEFAULT_MAX_LOOKBEHIND_CONSTRUCT_LENGTH,
+        max_boundary_context_length: int = AbstractTextIterator.DEFAULT_MAX_BOUNDARY_CONTEXT_LENGTH,
         margin: int = DEFAULT_MARGIN,
         default_pattern_flags: int = 0,
     ) -> None:
@@ -402,7 +381,7 @@ class SrxTextIterator(AbstractTextIterator):
         """
 
         self.buffer_length: int = buffer_length
-        self.max_lookbehind_construct_length: int = max_lookbehind_construct_length
+        self.max_boundary_context_length: int = max_boundary_context_length
         self.margin: int = margin
 
         if buffer_length > 0 and buffer_length <= margin:
@@ -423,9 +402,10 @@ class SrxTextIterator(AbstractTextIterator):
         self.start_position: int = 0
         self.end_position: int = 0
         self.rule_manager: RuleManager = self.document.get_rule_manager(
-            self.language_rule_list, self.max_lookbehind_construct_length
+            self.language_rule_list, self.max_boundary_context_length
         )
         self.default_pattern_flags: int = default_pattern_flags
+        self._boundary_cache = {}
 
     def init_matchers(self) -> None:
 
@@ -435,7 +415,6 @@ class SrxTextIterator(AbstractTextIterator):
                 document=self.document,
                 rule=rule,
                 text=self.text_manager.get_text(),
-                max_lookaround_len=self.max_lookbehind_construct_length,
             )
             matcher.find()
             if not matcher.hit_end():
@@ -485,20 +464,16 @@ class SrxTextIterator(AbstractTextIterator):
         @return true if rule matcher breaks the text
         """
 
-        pattern: re.Regex = self.rule_manager.get_exception_pattern(rule_matcher.rule)
-        if pattern is not None:
-            matcher = JavaMatcher(
-                pattern=pattern,
-                text=self.text_manager.get_text(),
-                max_lookaround_len=self.max_lookbehind_construct_length,
-            )
-
-            matcher.use_transparent_bounds = True
-            matcher.region(rule_matcher.get_break_position())
-            res: bool = bool(matcher.looking_at())
-            return not res
-        else:
-            return True
+        for rule in self.rule_manager.get_exception_rules(rule_matcher.rule):
+            if rule_matches_at(
+                self.document,
+                rule,
+                self.text_manager.get_text(),
+                rule_matcher.get_break_position(),
+                self._boundary_cache,
+            ):
+                return False
+        return True
 
     def __next__(self) -> str:
         """
@@ -533,6 +508,7 @@ class SrxTextIterator(AbstractTextIterator):
 
                         self.text_manager.read_text(self.start_position)
                         self.start_position = 0
+                        self._boundary_cache = {}
                         self.init_matchers()
                         min_matcher = self.get_min_matcher()
 

@@ -1,12 +1,40 @@
 import unittest
 import io
-import regex as re
+import tempfile
+from pathlib import Path
 from choppa.srx_parser import SrxDocument
-from choppa.iterators import SrxTextIterator, FastTextIterator
+from choppa.iterators import (
+    FastTextIterator,
+    LargeFileSrxTextIterator,
+    ManyFilesSrxTextIterator,
+    SrxTextIterator,
+)
 from choppa.version import SrxVersion
 from choppa.utils import remove_capturing_groups
 
 class ExtensiveTest(unittest.TestCase):
+    SIMPLE_SRX = r"""<?xml version="1.0" encoding="UTF-8"?>
+<srx version="2.0">
+    <header cascade="yes"/>
+    <body>
+        <languagerules>
+            <languagerule languagerulename="Default">
+                <rule break="no">
+                    <beforebreak>Mr\.</beforebreak>
+                    <afterbreak>\s</afterbreak>
+                </rule>
+                <rule break="yes">
+                    <beforebreak>\.</beforebreak>
+                    <afterbreak>\s</afterbreak>
+                </rule>
+            </languagerule>
+        </languagerules>
+        <maprules>
+            <languagemap languagepattern=".*" languagerulename="Default"/>
+        </maprules>
+    </body>
+</srx>"""
+
     def test_remove_capturing_groups(self):
         self.assertEqual(remove_capturing_groups(r"(abc)"), r"(?:abc)")
         self.assertEqual(remove_capturing_groups(r"(?:abc)"), r"(?:abc)")
@@ -50,28 +78,7 @@ class ExtensiveTest(unittest.TestCase):
         self.assertEqual(lang_rules[0].rules[0].before_pattern, r"\.")
 
     def test_fast_iterator_parity(self):
-        srx_content = r"""<?xml version="1.0" encoding="UTF-8"?>
-<srx version="2.0">
-    <header cascade="yes"/>
-    <body>
-        <languagerules>
-            <languagerule languagerulename="Default">
-                <rule break="no">
-                    <beforebreak>Mr\.</beforebreak>
-                    <afterbreak>\s</afterbreak>
-                </rule>
-                <rule break="yes">
-                    <beforebreak>\.</beforebreak>
-                    <afterbreak>\s</afterbreak>
-                </rule>
-            </languagerule>
-        </languagerules>
-        <maprules>
-            <languagemap languagepattern=".*" languagerulename="Default"/>
-        </maprules>
-    </body>
-</srx>"""
-        document = SrxDocument(ruleset=srx_content)
+        document = SrxDocument(ruleset=self.SIMPLE_SRX)
         text = "Mr. Smith is here. He is happy."
         
         it_std = SrxTextIterator(document, "en", text)
@@ -82,6 +89,52 @@ class ExtensiveTest(unittest.TestCase):
         
         self.assertEqual(segments_std, segments_fast)
         self.assertEqual(segments_std, ["Mr. Smith is here.", " He is happy."])
+
+    def test_large_file_iterator_streams_reader(self):
+        document = SrxDocument(ruleset=self.SIMPLE_SRX)
+        text = "Mr. Smith is here. He is happy."
+        reader = io.StringIO(text)
+
+        segments = list(
+            LargeFileSrxTextIterator(
+                document,
+                "en",
+                reader,
+                buffer_length=64,
+                margin=8,
+            )
+        )
+
+        self.assertEqual(segments, ["Mr. Smith is here.", " He is happy."])
+        self.assertFalse(reader.closed)
+
+    def test_many_files_iterator_reuses_document_and_reports_source(self):
+        document = SrxDocument(ruleset=self.SIMPLE_SRX)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            first = Path(tmpdir) / "first.txt"
+            second = Path(tmpdir) / "second.txt"
+            first.write_text("Mr. Smith is here. He is happy.", encoding="utf-8")
+            second.write_text("One. Two.", encoding="utf-8")
+
+            segments = list(
+                ManyFilesSrxTextIterator(
+                    document,
+                    "en",
+                    [first, second],
+                    include_source=True,
+                )
+            )
+
+        self.assertEqual(
+            segments,
+            [
+                (first, "Mr. Smith is here."),
+                (first, " He is happy."),
+                (second, "One."),
+                (second, " Two."),
+            ],
+        )
 
 if __name__ == "__main__":
     unittest.main()

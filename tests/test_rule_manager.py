@@ -34,11 +34,11 @@ class RuleManagerTest(unittest.TestCase):
         language_rule_list: List[LanguageRule] = document.get_language_rule_list("pl")
         rule_manager: RuleManager = document.get_rule_manager(language_rule_list, 100)
 
-        self.assertEqual(rule_manager.exception_pattern_map[break_rule1].pattern, r"(?:(?<=[Pp]rof\.)(?=\s))")
-        self.assertEqual(rule_manager.exception_pattern_map[break_rule2].pattern, r"(?:(?<=[Pp]rof\.)(?=\s))")
+        self.assertEqual(rule_manager.get_exception_rules(break_rule1), [rule1])
+        self.assertEqual(rule_manager.get_exception_rules(break_rule2), [rule1])
 
         language_rule_list = document.get_language_rule_list("en")
         rule_manager: RuleManager = document.get_rule_manager(language_rule_list, 100)
 
-        self.assertEqual(rule_manager.exception_pattern_map[break_rule1].pattern, r"(?:(?<=Mr\.)(?=\s))")
-        self.assertEqual(rule_manager.exception_pattern_map[break_rule2].pattern, r"(?:(?<=Mr\.)(?=\s))")
+        self.assertEqual(rule_manager.get_exception_rules(break_rule1), [rule2])
+        self.assertEqual(rule_manager.get_exception_rules(break_rule2), [rule2])

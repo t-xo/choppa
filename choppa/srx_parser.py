@@ -8,6 +8,7 @@ import xmlschema
 
 from .structures import Rule, LanguageRule, LanguageMap
 from .rule_manager import RuleManager
+from .utils import translate_srx_regex
 
 
 class SrxDocument:
@@ -48,26 +49,24 @@ class SrxDocument:
         """
         self.language_map_list.append(LanguageMap(pattern, language_rule))
 
-    def compile(self, regex: str, flags: int = re.U | re.V1):
+    def compile(self, regex: str, flags: int = re.U | re.V1, normalize_anchors: bool = True):
         """
         Compiles given pattern as regex.Regex (V1), caches it
         """
-        key: str = f"PATTERN_{regex}_{flags}"
+        key: str = f"PATTERN_{regex}_{flags}_{normalize_anchors}"
         pattern = self.regex_cache.get(key, None)
         if pattern is None:
-            regex = regex.replace(r"\h", r"\p{H}").replace(r"\v", r"\p{V}")
-            regex = re.sub(r"(?<!\\)(?<=^|\||\()\^", r"(?:\\G|^)", regex)
-            pattern = re.compile(regex, flags=flags)
+            pattern = re.compile(translate_srx_regex(regex, normalize_anchors=normalize_anchors), flags=flags)
             self.regex_cache[key] = pattern
         return pattern
 
     def get_rule_manager(
-        self, language_rule_list: List[LanguageRule], max_lookbehind_construct_length: int
+        self, language_rule_list: List[LanguageRule], max_boundary_context_length: int
     ) -> RuleManager:
-        key: str = f"RULE_MANAGER_{language_rule_list}_{max_lookbehind_construct_length}"
+        key: str = f"RULE_MANAGER_{language_rule_list}_{max_boundary_context_length}"
         rule_manager = self.rule_manager_cache.get(key, None)
         if rule_manager is None:
-            rule_manager = RuleManager(self, language_rule_list, max_lookbehind_construct_length)
+            rule_manager = RuleManager(self, language_rule_list, max_boundary_context_length)
             self.rule_manager_cache[key] = rule_manager
         return rule_manager
 

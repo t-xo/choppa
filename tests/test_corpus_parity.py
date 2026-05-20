@@ -22,11 +22,21 @@ class CorpusParityTest(unittest.TestCase):
         repo_root = Path(__file__).resolve().parents[1]
         resource_dir = repo_root / "test_resources"
         ruleset = repo_root / "segment.srx"
+        if not ruleset.exists() or not resource_dir.exists():
+            self.skipTest("optional SRX corpus resources are not available")
+
+        input_files = sorted(resource_dir.glob("*_test_in.txt"))
+        if not input_files:
+            self.skipTest("optional SRX corpus input files are not available")
+
         document = SrxDocument(ruleset=str(ruleset))
 
-        for input_file in sorted(resource_dir.glob("*_test_in.txt")):
+        for input_file in input_files:
             lang = input_file.name.split("_")[0]
             expected_file = resource_dir / f"{lang}_test_expected.txt"
+            if not expected_file.exists():
+                self.skipTest(f"optional expected corpus file is not available: {expected_file.name}")
+
             expected = [line.rstrip() for line in expected_file.read_text(encoding="utf-8").splitlines()]
             actual = []
             for raw_line in input_file.read_text(encoding="utf-8").splitlines():
@@ -42,4 +52,3 @@ class CorpusParityTest(unittest.TestCase):
                 actual,
                 msg=f"{lang} mismatch (+{plus} -{minus})",
             )
-

@@ -1,16 +1,16 @@
 import regex as re
-from typing import Union, Callable, Optional
+from typing import Union, Optional, Dict, Tuple, Any
 from .srx_parser import SrxDocument
 from .structures import Rule
+from .utils import translate_srx_regex
 
 
-class JavaMatcher:
+class RegexRegionMatcher:
     """
-    Partial implementation of java's matcher class using python's regex module.
-    It uses pos and endpos to respect regions while allowing lookaround context.
+    Region-aware matcher using Python's regex module.
     """
 
-    def __init__(self, pattern: Union[str, re.Regex], text: str, max_lookaround_len: int = 100) -> None:
+    def __init__(self, pattern: Union[str, re.Regex], text: str) -> None:
         self._text: str = text
         self._text_len: int = len(self._text)
         self._start: int = 0
@@ -18,11 +18,9 @@ class JavaMatcher:
         self.start: int = 0
         self.end: int = 0
         self.use_transparent_bounds = False
-        self.max_lookaround_len = max_lookaround_len
 
         if isinstance(pattern, str):
-            pattern = re.sub(r"(?<!\\)(?<=^|\||\()\^", r"(?:\\G|^)", pattern)
-            self.pattern = re.compile(pattern, flags=re.M | re.U | re.V1)
+            self.pattern = re.compile(translate_srx_regex(pattern), flags=re.M | re.U | re.V1)
         else:
             self.pattern = pattern
 
@@ -69,12 +67,97 @@ class JavaMatcher:
         return f"{self.pattern}: <{self._start}, {self._end}>"
 
 
+def rule_matches_at(
+    document: SrxDocument,
+    rule: Rule,
+    text: str,
+    position: int,
+    cache: Optional[Dict[Tuple[Any, ...], Any]] = None,
+) -> bool:
+    """
+    Match an SRX rule at a boundary directly. The beforebreak pattern must end
+    at the boundary and the afterbreak pattern must begin there.
+    """
+
+    before_pattern = document.compile(rule.before_pattern, normalize_anchors=False)
+    after_pattern = document.compile(rule.after_pattern)
+
+    return _matches_before(before_pattern, text, position, cache) and _matches_after(after_pattern, text, position)
+
+
+def _matches_before(
+    pattern: re.Regex,
+    text: str,
+    position: int,
+    cache: Optional[Dict[Tuple[Any, ...], Any]] = None,
+) -> bool:
+    if position < 0 or position > len(text):
+        return False
+
+    if pattern.pattern == "":
+        return True
+
+    if cache is not None:
+        end_positions, start_positions = _get_before_match_positions(pattern, text, cache)
+        if position in end_positions:
+            return True
+        if not start_positions:
+            return False
+
+        starts = [start for start in start_positions if start <= position]
+    else:
+        seen_match = False
+        starts = []
+        for match in pattern.finditer(text, endpos=position, overlapped=True):
+            seen_match = True
+            if match.end() == position:
+                return True
+            if match.start() <= position:
+                starts.append(match.start())
+        if not seen_match:
+            return False
+
+    for start in starts:
+        if pattern.fullmatch(text, pos=start, endpos=position) is not None:
+            return True
+
+    return False
+
+
+def _get_before_match_positions(
+    pattern: re.Regex,
+    text: str,
+    cache: Dict[Tuple[Any, ...], Any],
+):
+    key = ("before-match-positions", id(pattern), id(text), len(text))
+    cached = cache.get(key)
+    if cached is not None:
+        return cached
+
+    end_positions = set()
+    start_positions = set()
+    for match in pattern.finditer(text, overlapped=True):
+        start_positions.add(match.start())
+        end_positions.add(match.end())
+
+    result = (end_positions, sorted(start_positions))
+    cache[key] = result
+    return result
+
+
+def _matches_after(pattern: re.Regex, text: str, position: int) -> bool:
+    if position < 0 or position > len(text):
+        return False
+
+    return pattern.match(text, pos=position) is not None
+
+
 class RuleMatcher:
     """
     Represents matcher finding subsequent occurrences of one rule.
     """
 
-    def __init__(self, document: SrxDocument, rule: Rule, text: str, max_lookaround_len: int = 100) -> None:
+    def __init__(self, document: SrxDocument, rule: Rule, text: str) -> None:
         """
         Creates matcher.
         rule rule which will be searched in the text
@@ -87,12 +170,8 @@ class RuleMatcher:
         self.text_len: int = len(text)
         self.before_pattern: re.Regex = document.compile(rule.before_pattern)
         self.after_pattern: re.Regex = document.compile(rule.after_pattern)
-        self.before_matcher: JavaMatcher = JavaMatcher(
-            self.before_pattern, self.text, max_lookaround_len=max_lookaround_len
-        )
-        self.after_matcher: JavaMatcher = JavaMatcher(
-            self.after_pattern, self.text, max_lookaround_len=max_lookaround_len
-        )
+        self.before_matcher: RegexRegionMatcher = RegexRegionMatcher(self.before_pattern, self.text)
+        self.after_matcher: RegexRegionMatcher = RegexRegionMatcher(self.after_pattern, self.text)
         self.found = True
 
     def find(self, start: Optional[int] = None) -> bool:

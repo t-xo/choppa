@@ -1,24 +1,24 @@
 import unittest
 import regex as re
-from choppa.rule_matcher import JavaMatcher
+from choppa.rule_matcher import RegexRegionMatcher
 from choppa.srx_parser import SrxDocument
 
 class RegressionTest(unittest.TestCase):
     def test_negated_character_class_not_broken(self):
-        matcher = JavaMatcher(pattern=r"[^a]", text="abc")
+        matcher = RegexRegionMatcher(pattern=r"[^a]", text="abc")
 
         match = matcher.find()
         self.assertIsNotNone(match)
         self.assertEqual(match.group(), "b")
         
     def test_anchoring_at_alternatives(self):
-        matcher = JavaMatcher(pattern=r"(^foo)|(bar)", text="bar")
+        matcher = RegexRegionMatcher(pattern=r"(^foo)|(bar)", text="bar")
         match = matcher.find()
         self.assertIsNotNone(match)
         self.assertEqual(match.group(), "bar")
         
         matcher.region(0)
-        matcher = JavaMatcher(pattern=r"(^foo)|(bar)", text="foo")
+        matcher = RegexRegionMatcher(pattern=r"(^foo)|(bar)", text="foo")
         match = matcher.find()
         self.assertIsNotNone(match)
         self.assertEqual(match.group(), "foo")
@@ -40,15 +40,38 @@ class RegressionTest(unittest.TestCase):
         self.assertIsNotNone(match_m, "Should match after newline in multiline mode")
 
     def test_word_boundary_at_region_start(self):
-        matcher = JavaMatcher(pattern=r"\bfoo", text="xfoo")
+        matcher = RegexRegionMatcher(pattern=r"\bfoo", text="xfoo")
         matcher.region(1)
         match = matcher.match()
         self.assertIsNone(match)
         
-        matcher = JavaMatcher(pattern=r"\bfoo", text=" foo")
+        matcher = RegexRegionMatcher(pattern=r"\bfoo", text=" foo")
         matcher.region(1)
         match = matcher.match()
         self.assertIsNotNone(match)
+
+    def test_srx_horizontal_and_vertical_whitespace_escapes(self):
+        doc = SrxDocument()
+
+        horizontal = doc.compile(r"a\hb")
+        self.assertIsNotNone(horizontal.fullmatch("a b"))
+        self.assertIsNotNone(horizontal.fullmatch("a\u00A0b"))
+        self.assertIsNone(horizontal.fullmatch("a\nb"))
+
+        vertical = doc.compile(r"a\vb")
+        self.assertIsNotNone(vertical.fullmatch("a\nb"))
+        self.assertIsNotNone(vertical.fullmatch("a\u2028b"))
+        self.assertIsNone(vertical.fullmatch("a b"))
+
+    def test_srx_quote_and_escape_escapes(self):
+        doc = SrxDocument()
+
+        quoted = doc.compile(r"\Q[abc]\E")
+        self.assertIsNotNone(quoted.fullmatch("[abc]"))
+        self.assertIsNone(quoted.fullmatch("a"))
+
+        escape = doc.compile(r"a\eb")
+        self.assertIsNotNone(escape.fullmatch("a\x1bb"))
 
 if __name__ == "__main__":
     unittest.main()

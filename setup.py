@@ -11,7 +11,7 @@ version = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
 setup(
     name="choppa",
     version=version,
-    description="A Python port of the Java SRX segmenter library for rule-based text tokenization.",
+    description="An Okapi SRX-compatible Python library for rule-based text tokenization.",
     python_requires=">=3.7",
     long_description=long_description,
     long_description_content_type="text/markdown",
@@ -39,6 +39,7 @@ setup(
         "Programming Language :: Python :: 3.9",
         "Programming Language :: Python :: 3.10",
         "Programming Language :: Python :: 3.11",
+        "Programming Language :: Python :: 3.12",
     ],
     package_data={"choppa": ["data/srx/*.srx", "data/xsd/*.xsd"]},
 )

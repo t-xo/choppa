@@ -1,5 +1,5 @@
 import unittest
-from choppa.rule_matcher import RuleMatcher, JavaMatcher
+from choppa.rule_matcher import RuleMatcher, RegexRegionMatcher, rule_matches_at
 from choppa.srx_parser import SrxDocument, Rule
 
 
@@ -32,8 +32,8 @@ class RuleMatcherTest(unittest.TestCase):
         self.assertEqual(9, matcher.get_break_position())
         self.assertEqual(11, matcher.get_end_position())
 
-    def test_java_matcher_find(self):
-        matcher: JavaMatcher = JavaMatcher(pattern=r"foo", text="foobarfoo")
+    def test_region_matcher_find(self):
+        matcher: RegexRegionMatcher = RegexRegionMatcher(pattern=r"foo", text="foobarfoo")
 
         match = matcher.find()
         self.assertEqual(matcher.start, 0)
@@ -48,8 +48,8 @@ class RuleMatcherTest(unittest.TestCase):
         self.assertEqual(matcher._start, 9)
         self.assertEqual(matcher._end, 9)
 
-    def test_java_matcher_looking_at(self):
-        matcher: JavaMatcher = JavaMatcher(pattern=r"foo", text="foobarfoo")
+    def test_region_matcher_looking_at(self):
+        matcher: RegexRegionMatcher = RegexRegionMatcher(pattern=r"foo", text="foobarfoo")
 
         match = matcher.looking_at()
         self.assertEqual(matcher.start, 0)
@@ -64,8 +64,8 @@ class RuleMatcherTest(unittest.TestCase):
         self.assertEqual(matcher.start, 6)
         self.assertEqual(matcher.end, 9)
 
-    def test_java_matcher_empty(self):
-        matcher: JavaMatcher = JavaMatcher(pattern=r"", text="123")
+    def test_region_matcher_empty(self):
+        matcher: RegexRegionMatcher = RegexRegionMatcher(pattern=r"", text="123")
 
         match = matcher.find()
         self.assertEqual(matcher.start, 0)
@@ -87,7 +87,7 @@ class RuleMatcherTest(unittest.TestCase):
         self.assertEqual(match, None)
 
     def test_caret_matcher(self):
-        matcher: JavaMatcher = JavaMatcher(pattern=r"^\d", text="123")
+        matcher: RegexRegionMatcher = RegexRegionMatcher(pattern=r"^\d", text="123")
 
         match = matcher.find()
         self.assertEqual(matcher.start, 0)
@@ -105,7 +105,7 @@ class RuleMatcherTest(unittest.TestCase):
         self.assertEqual(match, None)
 
     def test_caret_alt_matcher(self):
-        matcher: JavaMatcher = JavaMatcher(pattern=r"(^foo)|(bar)", text="foobarfoo")
+        matcher: RegexRegionMatcher = RegexRegionMatcher(pattern=r"(^foo)|(bar)", text="foobarfoo")
 
         match = matcher.find()
         self.assertEqual(matcher.start, 0)
@@ -122,65 +122,18 @@ class RuleMatcherTest(unittest.TestCase):
         match = matcher.find()
         self.assertEqual(match, None)
 
-    def test_transparent_bound(self):
-        matcher: JavaMatcher = JavaMatcher(pattern=r"(?:(?<=[Pp]rof\.)(?=\s))", text="12345 Prof. foobar")
-        matcher.use_transparent_bounds = True
+    def test_rule_matches_at_boundary(self):
+        document = SrxDocument()
+        rule = Rule(False, r"[Pp]rof\.", r"\s")
+        text = "12345 Prof. foobar"
 
-        match = matcher.find()
-        self.assertEqual(matcher.start, 11)
-        self.assertEqual(matcher.end, 11)
+        self.assertTrue(rule_matches_at(document, rule, text, 11))
+        self.assertFalse(rule_matches_at(document, rule, text, 12))
 
-        matcher.region(11)
-        match = matcher.find()
-        self.assertEqual(matcher.start, 11)
-        self.assertEqual(matcher.end, 11)
+    def test_rule_matches_at_boundary_after_long_prefix(self):
+        document = SrxDocument()
+        rule = Rule(False, r"[Pp]rof\.", r"\s")
+        text = "".join("AAAAAAA " * 100) + "Prof. foobar"
 
-        matcher.region(12)
-        match = matcher.find()
-        self.assertIsNone(match)
-
-        matcher.region(0)
-        match = matcher.looking_at()
-        self.assertIsNone(match)
-
-        matcher.region(11)
-        match = matcher.find()
-        self.assertEqual(matcher.start, 11)
-        self.assertEqual(matcher.end, 11)
-
-        matcher.region(12)
-        match = matcher.find()
-        self.assertIsNone(match)
-
-    def test_transparent_bound_limited_lookbehind(self):
-        matcher: JavaMatcher = JavaMatcher(
-            pattern=r"(?:(?<=[Pp]rof\.)(?=\s))", text="".join("AAAAAAA " * 100) + "Prof. foobar",
-            max_lookaround_len=1000
-        )
-        matcher.use_transparent_bounds = True
-
-        match = matcher.find()
-        self.assertEqual(matcher.start, 805)
-        self.assertEqual(matcher.end, 805)
-
-        matcher.region(805)
-        match = matcher.find()
-        self.assertEqual(matcher.start, 805)
-        self.assertEqual(matcher.end, 805)
-
-        matcher.region(806)
-        match = matcher.find()
-        self.assertIsNone(match)
-
-        matcher.region(0)
-        match = matcher.looking_at()
-        self.assertIsNone(match)
-
-        matcher.region(805)
-        match = matcher.find()
-        self.assertEqual(matcher.start, 805)
-        self.assertEqual(matcher.end, 805)
-
-        matcher.region(806)
-        match = matcher.find()
-        self.assertIsNone(match)
+        self.assertTrue(rule_matches_at(document, rule, text, 805))
+        self.assertFalse(rule_matches_at(document, rule, text, 806))
